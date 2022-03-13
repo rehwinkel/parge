@@ -1,0 +1,5 @@
+token NUM = ([0-9])+;
+token HEX = ([0-F])+;
+token OCT = ([0-7])+;
+token NOT_A = ([^A])+;
+token OCTOPUS = "octo";
