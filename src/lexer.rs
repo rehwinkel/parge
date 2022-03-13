@@ -1,9 +1,6 @@
 use color_eyre::{eyre::ensure, Result};
 use smol_str::SmolStr;
-use std::{
-    collections::{BTreeSet, HashSet},
-    fmt::Write,
-};
+use std::collections::{BTreeSet, HashSet};
 
 use crate::rules::{Element, Rule};
 
@@ -70,41 +67,6 @@ impl DFA {
     fn connect_range(&mut self, start: usize, end: usize, range: (u32, u32)) {
         self.connections.push(Connection { range, start, end })
     }
-
-    fn as_dot_string(&self) -> Result<String, std::fmt::Error> {
-        let mut out = String::new();
-
-        write!(out, "digraph {{")?;
-        for connection in &self.connections {
-            write!(
-                out,
-                "{} -> {} [label=\"{}\"] ",
-                if let State {
-                    accepting: Some(name),
-                } = self.states.get(connection.start).unwrap()
-                {
-                    format!("{}{}", name.to_string(), connection.start)
-                } else {
-                    format!("S{}", connection.start)
-                },
-                if let State {
-                    accepting: Some(name),
-                } = self.states.get(connection.end).unwrap()
-                {
-                    format!("{}{}", name.to_string(), connection.end)
-                } else {
-                    format!("S{}", connection.end)
-                },
-                if connection.range.0 == connection.range.1 {
-                    format!("{:?}", connection.range.0)
-                } else {
-                    format!("{:?}-{:?}", connection.range.0, connection.range.1)
-                }
-            )?;
-        }
-        write!(out, "}}")?;
-        Ok(out)
-    }
 }
 
 impl NFA {
@@ -117,47 +79,6 @@ impl NFA {
             entry,
             connections: Vec::new(),
         }
-    }
-
-    fn as_dot_string(&self) -> Result<String, std::fmt::Error> {
-        let mut out = String::new();
-
-        write!(out, "digraph {{")?;
-        for connection in &self.connections {
-            let (a, b, label) = match connection {
-                EpsilonConnection::Connection(r, a, b) => {
-                    if r.0 == r.1 {
-                        (a, b, format!("{:?}", r.0))
-                    } else {
-                        (a, b, format!("{:?}-{:?}", r.0, r.1))
-                    }
-                }
-                EpsilonConnection::Epsilon(a, b) => (a, b, format!("EPS")),
-            };
-            write!(
-                out,
-                "{} -> {} [label=\"{}\"] ",
-                if let State {
-                    accepting: Some(name),
-                } = self.states.get(a.clone()).unwrap()
-                {
-                    format!("{}{}", name.to_string(), a)
-                } else {
-                    format!("S{}", a)
-                },
-                if let State {
-                    accepting: Some(name),
-                } = self.states.get(b.clone()).unwrap()
-                {
-                    format!("{}{}", name.to_string(), b)
-                } else {
-                    format!("S{}", b)
-                },
-                label
-            )?;
-        }
-        write!(out, "}}")?;
-        Ok(out)
     }
 
     fn add(&mut self, state: State) -> usize {
@@ -438,6 +359,12 @@ impl Lexer {
         powerset_construction(&nfa, 0, &mut powersets, &mut connections, &alphabet);
         let mut dfa = DFA::new();
         for ps in powersets {
+            if ps.is_empty() {
+                dfa.add(State {
+                    accepting: Some(SmolStr::from("_TRAP")),
+                });
+                continue;
+            }
             let mut acceptions = Vec::new();
             for i in ps {
                 if let Some(accept) = &nfa.states[i].accepting {
@@ -460,5 +387,22 @@ impl Lexer {
             dfa.connect_range(c.start, c.end, c.range);
         }
         Ok(Lexer { dfa })
+    }
+
+    pub fn get_states(&self) -> Vec<Option<&SmolStr>> {
+        self.dfa
+            .states
+            .iter()
+            .map(|s| s.accepting.as_ref())
+            .collect()
+    }
+
+    pub fn get_connections(&self, start: usize) -> Vec<(u32, u32, usize)> {
+        self.dfa
+            .connections
+            .iter()
+            .filter(|&c| c.start == start)
+            .map(|c| (c.range.0, c.range.1, c.end))
+            .collect()
     }
 }
