@@ -1,13 +1,15 @@
+use color_eyre::{eyre::ensure, Result};
 use smol_str::SmolStr;
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     fmt::Write,
-    os::linux::raw,
 };
 
 use crate::rules::{Element, Rule};
 
-pub struct Lexer {}
+pub struct Lexer {
+    dfa: DFA,
+}
 
 #[derive(Debug)]
 struct State {
@@ -27,18 +29,13 @@ impl EpsilonConnection {
             EpsilonConnection::Epsilon(a, _) => *a,
         }
     }
-    fn get_b(&self) -> usize {
-        match self {
-            EpsilonConnection::Connection(_, _, b) => *b,
-            EpsilonConnection::Epsilon(_, b) => *b,
-        }
-    }
 }
 
 #[derive(Debug)]
-enum Connection {
-    Char(char, usize, usize),
-    Range((char, char), usize, usize),
+struct Connection {
+    range: (u32, u32),
+    start: usize,
+    end: usize,
 }
 
 struct NFA {
@@ -49,20 +46,64 @@ struct NFA {
 
 struct DFA {
     states: Vec<State>,
-    entry: usize,
     connections: Vec<Connection>,
 }
 
 impl DFA {
     fn new() -> Self {
-        let mut states = Vec::new();
-        let entry = states.len();
-        states.push(State { accepting: None });
         DFA {
-            states,
-            entry,
+            states: Vec::new(),
             connections: Vec::new(),
         }
+    }
+
+    fn add(&mut self, state: State) -> usize {
+        let l = self.states.len();
+        self.states.push(state);
+        l
+    }
+
+    fn add_empty(&mut self) -> usize {
+        self.add(State { accepting: None })
+    }
+
+    fn connect_range(&mut self, start: usize, end: usize, range: (u32, u32)) {
+        self.connections.push(Connection { range, start, end })
+    }
+
+    fn as_dot_string(&self) -> Result<String, std::fmt::Error> {
+        let mut out = String::new();
+
+        write!(out, "digraph {{")?;
+        for connection in &self.connections {
+            write!(
+                out,
+                "{} -> {} [label=\"{}\"] ",
+                if let State {
+                    accepting: Some(name),
+                } = self.states.get(connection.start).unwrap()
+                {
+                    format!("{}{}", name.to_string(), connection.start)
+                } else {
+                    format!("S{}", connection.start)
+                },
+                if let State {
+                    accepting: Some(name),
+                } = self.states.get(connection.end).unwrap()
+                {
+                    format!("{}{}", name.to_string(), connection.end)
+                } else {
+                    format!("S{}", connection.end)
+                },
+                if connection.range.0 == connection.range.1 {
+                    format!("{:?}", connection.range.0)
+                } else {
+                    format!("{:?}-{:?}", connection.range.0, connection.range.1)
+                }
+            )?;
+        }
+        write!(out, "}}")?;
+        Ok(out)
     }
 }
 
@@ -348,15 +389,15 @@ fn epsilon_closure(nfa: &NFA, connected: &mut BTreeSet<usize>) {
 
 fn powerset_construction(
     nfa: &NFA,
-    start_closure: &BTreeSet<usize>,
-    powersets: &mut HashSet<BTreeSet<usize>>,
+    start_closure: usize,
+    powersets: &mut Vec<BTreeSet<usize>>,
+    connections: &mut Vec<Connection>,
     alphabet: &Vec<(u32, u32)>,
-) -> DFA {
-    let dfa = DFA::new();
+) {
     for arange in alphabet {
         let mut transition_closure = BTreeSet::new();
         for connection in &nfa.connections {
-            if start_closure.contains(&connection.get_a()) {
+            if powersets[start_closure].contains(&connection.get_a()) {
                 match connection {
                     EpsilonConnection::Epsilon(..) => (),
                     &EpsilonConnection::Connection(range, _, b) => {
@@ -368,33 +409,56 @@ fn powerset_construction(
             }
         }
         epsilon_closure(nfa, &mut transition_closure);
-        println!(
-            "{:?} {:?} -> {:?}",
-            arange, start_closure, &transition_closure
-        );
-        if !powersets.contains(&transition_closure) {
-            powersets.insert(transition_closure.clone());
-            powerset_construction(nfa, &transition_closure, powersets, alphabet);
-        }
-        // todo: add connection (arange.0, arange.1)
+        let pos = if let Some(pos) = powersets.iter().position(|c| c == &transition_closure) {
+            pos
+        } else {
+            let pos = powersets.len();
+            powersets.push(transition_closure);
+            powerset_construction(nfa, pos, powersets, connections, alphabet);
+            pos
+        };
+        connections.push(Connection {
+            range: (arange.0, arange.1),
+            start: start_closure,
+            end: pos,
+        });
     }
-    dfa
 }
 
 impl Lexer {
-    pub fn from_rules(rules: &Vec<Rule>) -> Self {
+    pub fn from_rules(rules: &Vec<Rule>) -> Result<Self> {
         let alphabet = construct_alphabet(rules.iter().filter(|rule| rule.is_terminal));
         let nfa = construct_nfa(rules.iter().filter(|rule| rule.is_terminal), &alphabet);
-        //println!("{:?}", nfa.states);
-        //println!("{:?}", nfa.connections);
-        //println!("{}", nfa.as_dot_string().unwrap());
-        let mut powersets = HashSet::new();
+        let mut powersets = Vec::new();
+        let mut connections = Vec::new();
         let mut closure = BTreeSet::new();
         closure.insert(nfa.entry);
         epsilon_closure(&nfa, &mut closure);
-        powersets.insert(closure.clone());
-        let dfa = powerset_construction(&nfa, &closure, &mut powersets, &alphabet);
-        println!("{:?}", powersets);
-        Lexer {}
+        powersets.push(closure);
+        powerset_construction(&nfa, 0, &mut powersets, &mut connections, &alphabet);
+        let mut dfa = DFA::new();
+        for ps in powersets {
+            let mut acceptions = Vec::new();
+            for i in ps {
+                if let Some(accept) = &nfa.states[i].accepting {
+                    acceptions.push(accept);
+                }
+            }
+            ensure!(
+                acceptions.len() < 2,
+                "Accepting state must accept exactly one rule"
+            );
+            if acceptions.is_empty() {
+                dfa.add_empty();
+            } else {
+                dfa.add(State {
+                    accepting: Some(acceptions[0].clone()),
+                });
+            }
+        }
+        for c in connections {
+            dfa.connect_range(c.start, c.end, c.range);
+        }
+        Ok(Lexer { dfa })
     }
 }

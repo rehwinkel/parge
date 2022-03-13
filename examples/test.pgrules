@@ -1,5 +1,12 @@
-token NUM = ([0-9])+;
-token HEX = ([0-F])+;
-token OCT = ([0-7])+;
-token NOT_A = ([^A])+;
-token OCTOPUS = "octo";
+token NUMBER_DEC = ([0-9])+;
+token NUMBER_HEX = ("0x" [0-F])+;
+token NUMBER_OCT = ("0o" [0-7])+;
+token NUMBER_BIN = ("0b" [01])+;
+token KW_FUNC = "func";
+token KW_STRUCT = "struct";
+token KW_BYTE = "byte";
+token KW_SHORT = "short";
+token KW_INT = "int";
+token KW_LONG = "long";
+token KW_FLOAT = "float";
+token KW_DOUBLE = "double";
