@@ -267,7 +267,7 @@ where
     let mut prev = 0u32;
     for point in range_points {
         ranges.insert((prev, prev));
-        if prev + 1 < point - 1 {
+        if prev + 1 <= point - 1 {
             ranges.insert((prev + 1, point - 1));
         }
         ranges.insert((point, point));

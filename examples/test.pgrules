@@ -1,7 +1,8 @@
+token WHITESPACE = ([ ])+;
 token LIT_DEC = ([0-9])+;
-token LIT_HEX = ("0x" [0-F])+;
-token LIT_OCT = ("0o" [0-7])+;
-token LIT_BIN = ("0b" [01])+;
+token LIT_HEX = "0x" ([0-9A-F])+;
+token LIT_OCT = "0o" ([0-7])+;
+token LIT_BIN = "0b" ([01])+;
 token LIT_FLOAT = ([0-9])+ "." ([0-9])+;
 token KW_FUNC = "func";
 token KW_STRUCT = "struct";
