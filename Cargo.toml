@@ -7,3 +7,7 @@ edition = "2021"
 nom = "7"
 color-eyre = "0.6.1"
 smol_str = "0.1.21"
+clap = "3"
+log = "0.4.14"
+fern = { version = "0.6.0", features = ["colored"] }
+chrono = "0.4.19"
