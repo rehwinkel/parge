@@ -3,7 +3,6 @@ use std::{fs::File, path::Path};
 use color_eyre::eyre::{bail, Result};
 use fern::colors::{Color, ColoredLevelConfig};
 use lexer::Lexer;
-use log::info;
 
 mod codegen;
 mod lexer;
@@ -92,18 +91,7 @@ fn generate_cpp(lexer: &Lexer, output: &Path) -> Result<()> {
     if !output.is_dir() {
         std::fs::create_dir_all(output)?;
     }
-    let cpp_config = codegen::cpp::CppConfig {
-        support_cpp17: true,
-    };
-    codegen::cpp::gen_header_lexer(
-        &lexer,
-        &cpp_config,
-        &mut File::create(output.join("lexer.h")).unwrap(),
-    )?;
-    codegen::cpp::gen_body_lexer(
-        &lexer,
-        &cpp_config,
-        &mut File::create(output.join("lexer.cpp")).unwrap(),
-    )?;
+    codegen::cpp::gen_header_lexer(&lexer, &mut File::create(output.join("lexer.h")).unwrap())?;
+    codegen::cpp::gen_body_lexer(&lexer, &mut File::create(output.join("lexer.cpp")).unwrap())?;
     Ok(())
 }
