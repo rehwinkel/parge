@@ -6,6 +6,7 @@ use crate::rules::{Element, Rule};
 
 pub struct Lexer {
     dfa: DFA,
+    alphabet: Vec<(u32, u32)>,
 }
 
 #[derive(Debug)]
@@ -386,7 +387,7 @@ impl Lexer {
         for c in connections {
             dfa.connect_range(c.start, c.end, c.range);
         }
-        Ok(Lexer { dfa })
+        Ok(Lexer { dfa, alphabet })
     }
 
     pub fn get_states(&self) -> Vec<Option<&SmolStr>> {
@@ -395,6 +396,10 @@ impl Lexer {
             .iter()
             .map(|s| s.accepting.as_ref())
             .collect()
+    }
+
+    pub fn get_alphabet(&self) -> &Vec<(u32, u32)> {
+        &self.alphabet
     }
 
     pub fn get_connections(&self, start: usize) -> Vec<(u32, u32, usize)> {

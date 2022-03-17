@@ -82,6 +82,7 @@ fn main() -> Result<()> {
 
     match language {
         "cpp" => generate_cpp(&lexer, output)?,
+        "java" => generate_java(&lexer, output)?,
         l => bail!("Language currently not supported: {}", l),
     }
     Ok(())
@@ -93,5 +94,16 @@ fn generate_cpp(lexer: &Lexer, output: &Path) -> Result<()> {
     }
     codegen::cpp::gen_header_lexer(&lexer, &mut File::create(output.join("lexer.h")).unwrap())?;
     codegen::cpp::gen_body_lexer(&lexer, &mut File::create(output.join("lexer.cpp")).unwrap())?;
+    Ok(())
+}
+
+fn generate_java(lexer: &Lexer, output: &Path) -> Result<()> {
+    if !output.is_dir() {
+        std::fs::create_dir_all(output)?;
+    }
+    codegen::java::gen_lexer(
+        &lexer,
+        &mut File::create(output.join("Lexer.java")).unwrap(),
+    )?;
     Ok(())
 }

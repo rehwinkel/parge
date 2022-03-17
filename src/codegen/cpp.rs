@@ -8,6 +8,15 @@ use smol_str::SmolStr;
 
 use crate::lexer::Lexer;
 
+macro_rules! write_line {
+    ($indent:expr,$writer:expr,$($arg:tt)*) => {
+        for _ in 0..$indent {
+            write!($writer, "    ")?;
+        }
+        write!($writer, $($arg)*)?;
+    };
+}
+
 pub fn gen_header_lexer<W: Write>(lexer: &Lexer, writer: &mut W) -> Result<()> {
     let tokens: BTreeSet<SmolStr> = lexer
         .get_states()
@@ -48,15 +57,6 @@ public:
             .join(",\r\n    ")
     )?;
     Ok(())
-}
-
-macro_rules! write_line {
-    ($indent:expr,$writer:expr,$($arg:tt)*) => {
-        for _ in 0..$indent {
-            write!($writer, "    ")?;
-        }
-        write!($writer, $($arg)*)?;
-    };
 }
 
 pub fn gen_body_lexer<W: Write>(lexer: &Lexer, writer: &mut W) -> Result<()> {
@@ -182,15 +182,8 @@ std::string Lexer::next(Token &token)
         trap
     )?;
     for (i, acc) in lexer.get_states().iter().enumerate() {
-        write_line!(3, writer, "case {}:\r\n", i);
-        if i == trap {
-            write_line!(5, writer, "{{\r\n");
-            write_line!(6, writer, "std::string s(found_pos, '\\0');\r\n");
-            write_line!(6, writer, "this->buf.read(&s[0], found_pos);\r\n");
-            write_line!(6, writer, "token = found;\r\n");
-            write_line!(6, writer, "return s;\r\n");
-            write_line!(5, writer, "}}\r\n");
-        } else {
+        if i != trap {
+            write_line!(3, writer, "case {}:\r\n", i);
             write_line!(4, writer, "switch (ch) {{\r\n");
             let mut results: BTreeMap<usize, Vec<(u32, u32)>> = BTreeMap::new();
             for (r0, r1, result) in lexer.get_connections(i) {
@@ -201,11 +194,15 @@ std::string Lexer::next(Token &token)
                 }
             }
             for (result, ranges) in results {
-                for (r0, r1) in ranges {
-                    if r0 == r1 {
-                        write_line!(5, writer, "case {}:\r\n", r0);
-                    } else {
-                        write_line!(5, writer, "case {} ... {}:\r\n", r0, r1);
+                if result == trap {
+                    write_line!(5, writer, "default:\r\n");
+                } else {
+                    for (r0, r1) in ranges {
+                        if r0 == r1 {
+                            write_line!(5, writer, "case {}:\r\n", r0);
+                        } else {
+                            write_line!(5, writer, "case {} ... {}:\r\n", r0, r1);
+                        }
                     }
                 }
                 if let Some(acc) = acc {
@@ -219,8 +216,8 @@ std::string Lexer::next(Token &token)
                 }
             }
             write_line!(4, writer, "}}\r\n");
+            write_line!(4, writer, "break;\r\n");
         }
-        write_line!(4, writer, "break;\r\n");
     }
     write!(
         writer,
